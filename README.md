@@ -1,42 +1,46 @@
-# 🌿 Day 3 – Health & Wellness Voice Companion  
-### Part of the **Murf AI Voice Agent Challenge**
+# 🎓 Day 4 – Teach-the-Tutor: Active Recall Coach  
+Part of the **Murf AI Voice Agents Challenge**
 
-This repository contains my implementation for **Day 3**, where I built a supportive Health & Wellness companion using **Murf Falcon – the fastest TTS API**.
-
-The agent performs daily voice-based check-ins, reflects on mood and goals, and stores each session in a JSON file for future reference.
+This agent helps users learn using one of the most powerful retention techniques: **learn → quiz → teach back**.  
+The agent uses *different voices* for each mode, powered by **Murf Falcon**.
 
 ---
 
-## 🎯 Primary Goal – Features Implemented
+## 🧠 Overview
 
-### ✔ 1. Grounded wellness persona  
-The agent speaks gently, supportively, and avoids medical claims.  
-It behaves like a daily check-in buddy—not a clinician.
+The agent supports **three modes**, each with its own behavior and voice:
 
-### ✔ 2. Voice-based check-ins  
-During each session, the agent asks about:
-- Mood  
-- Energy  
-- Stress  
-- 1–3 daily goals or intentions  
+| Mode        | Behavior | Voice (Murf Falcon) |
+|-------------|----------|----------------------|
+| **learn**       | Explains a concept using summary text | Matthew |
+| **quiz**        | Asks questions from the content file | Alicia |
+| **teach_back**  | User teaches the concept back; agent gives qualitative feedback | Ken |
 
-### ✔ 3. JSON persistence (`wellness_log.json`)  
-After each session, the backend stores:
-- Timestamp  
-- Mood description  
-- Goals  
-- Short summary sentence  
+The user can switch modes at any time by saying things like:
+- “Switch to quiz mode”
+- “Let’s learn about loops”
+- “I want to teach back variables”
 
-Example structure:
+---
+
+## 📚 Content File (JSON)
+
+All course content lives in:
+
+Example:
 
 ```json
-{
-  "sessions": [
-    {
-      "timestamp": "2025-11-22T10:45:00",
-      "mood": "Feeling okay, a bit tired",
-      "goals": ["Finish assignment", "Do a 20-min stretch"],
-      "summary": "You’re feeling a bit low-energy today and want to stay productive but balanced."
-    }
-  ]
-}
+[
+  {
+    "id": "variables",
+    "title": "Variables",
+    "summary": "Variables store values so you can reuse them later...",
+    "sample_question": "What is a variable and why is it useful?"
+  },
+  {
+    "id": "loops",
+    "title": "Loops",
+    "summary": "Loops let you repeat an action multiple times...",
+    "sample_question": "Explain the difference between a for loop and a while loop."
+  }
+]
