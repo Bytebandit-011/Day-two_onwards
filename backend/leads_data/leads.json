@@ -1,0 +1,42 @@
+[
+  {
+    "lead_id": "LEAD_20251126_114221",
+    "timestamp": "2025-11-26T11:42:21.621162",
+    "lead_info": {
+      "name": "Superman",
+      "company": "Marvel Enterprises",
+      "email": "ironman@gmail.com",
+      "role": "Software Engineer",
+      "use_case": "exploring investment options",
+      "team_size": "1",
+      "timeline": "future"
+    },
+    "conversation_history": [
+      {
+        "timestamp": "2025-11-26T11:37:45.672971",
+        "user_question": "What is Zerodha?",
+        "faq_matched": "What does Zerodha do?",
+        "answer_given": "Zerodha is a discount broker offering trading in stocks, commodities, currencies, and mutual funds with zero brokerage on equity delivery trades."
+      },
+      {
+        "timestamp": "2025-11-26T11:38:07.650429",
+        "user_question": "What is Kite in Zerodha?",
+        "faq_matched": "What does Zerodha do?",
+        "answer_given": "Zerodha is a discount broker offering trading in stocks, commodities, currencies, and mutual funds with zero brokerage on equity delivery trades."
+      },
+      {
+        "timestamp": "2025-11-26T11:38:42.498155",
+        "user_question": "Mutual funds in Zerodha",
+        "faq_matched": "What does Zerodha do?",
+        "answer_given": "Zerodha is a discount broker offering trading in stocks, commodities, currencies, and mutual funds with zero brokerage on equity delivery trades."
+      },
+      {
+        "timestamp": "2025-11-26T11:39:37.130358",
+        "user_question": "What does Zerodha offer in the mutual fund category?",
+        "faq_matched": "What does Zerodha do?",
+        "answer_given": "Zerodha is a discount broker offering trading in stocks, commodities, currencies, and mutual funds with zero brokerage on equity delivery trades."
+      }
+    ],
+    "completeness": "7/7 fields collected (100%)"
+  }
+]
