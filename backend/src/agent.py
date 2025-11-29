@@ -18,356 +18,373 @@ from livekit.agents import (
 from livekit.plugins import murf, silero, google, deepgram
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
-logger = logging.getLogger("food-ordering-agent")
+logger = logging.getLogger("dnd-game-master")
 load_dotenv(".env.local")
 
 
-class FoodOrderingAgent(Agent):
-    def __init__(self, catalog_data: dict) -> None:
-        self.catalog = catalog_data
-        self.cart = []  # List of {item_id, name, quantity, price, total}
-        self.customer_name = None
+class GameMasterAgent(Agent):
+    def __init__(self, universe: str = "detective", tone: str = "dramatic") -> None:
+        self.universe = universe
+        self.tone = tone
+        self.turn_count = 0
+        self.story_events = []
+        self.player_name = None
+        self.current_location = None
+        self.inventory = []
+        self.companions = []
+        self.clues = []  # For detective universe
+        self.suspects = []  # For detective universe
+        
+        # Define the universe settings
+        universe_settings = {
+            "fantasy": {
+                "setting": "a medieval fantasy realm of magic, dragons, and ancient kingdoms",
+                "starting_location": "the bustling market square of Thornhaven, a frontier town",
+                "threats": "bandits, monsters, dark wizards, and ancient curses",
+                "tone_desc": "epic and adventurous"
+            },
+            "sci-fi": {
+                "setting": "a distant future among the stars, where humanity has colonized multiple planets",
+                "starting_location": "the cargo bay of the starship Odyssey, docked at Station Epsilon",
+                "threats": "alien creatures, rogue AI, space pirates, and corporate conspiracies",
+                "tone_desc": "mysterious and tense"
+            },
+            "post-apocalypse": {
+                "setting": "a world devastated by nuclear war, where survivors struggle in the wasteland",
+                "starting_location": "the ruins of what was once a shopping mall, now a survivor settlement",
+                "threats": "raiders, mutants, radiation storms, and scarce resources",
+                "tone_desc": "gritty and survival-focused"
+            },
+            "horror": {
+                "setting": "a small town plagued by supernatural forces and dark secrets",
+                "starting_location": "an old Victorian mansion on the outskirts of Ravencrest",
+                "threats": "ghosts, demons, cultists, and eldritch horrors",
+                "tone_desc": "spooky and atmospheric"
+            },
+            "detective": {
+                "setting": "a noir-style city in the 1940s, where crime and corruption run deep",
+                "starting_location": "your cramped detective office on the third floor of a rundown building on 5th Street",
+                "threats": "murderers, crime syndicates, corrupt officials, and dark conspiracies",
+                "tone_desc": "noir and mysterious, with sharp observations and clever deductions"
+            }
+        }
+        
+        self.world = universe_settings.get(universe, universe_settings["detective"])
         
         super().__init__(
-            instructions="""You are a friendly food and grocery ordering assistant for FreshMart Store.
+            instructions=f"""You are an expert Game Master (GM) running a {tone} {universe} tabletop RPG adventure.
 
-YOUR ROLE:
-- Help customers order groceries, snacks, and prepared foods
-- Be helpful, patient, and conversational
-- Confirm additions and changes to the cart clearly
+UNIVERSE: {self.world['setting']}
 
-GREETING:
-"Hi! Welcome to FreshMart. I can help you order groceries, snacks, and meal ingredients. What would you like to order today?"
+YOUR ROLE AS GM:
+1. You describe scenes vividly and immersively
+2. You control NPCs (non-player characters) and the environment
+3. You react to the player's choices and drive the story forward
+4. You maintain continuity - remember what happened before
+5. You create challenges, mysteries, and opportunities for the player
 
-HOW TO HANDLE ORDERS:
+STORYTELLING RULES:
+- Use {self.world['tone_desc']} language appropriate to the {tone} tone
+- Keep descriptions extremely concise (1-2 sentences) before prompting player action
+- NO long descriptions - get to the action immediately
+- React logically to player choices - if they try something clever, it might work
+- If they try something impossible, quickly explain why and offer an alternative
+- Track important details: locations visited, NPCs met, items found
+- Build toward a quick climax by turn 6
+- Actively push story toward conclusion after turn 5
 
-1. SPECIFIC ITEMS:
-   When customer says "I want bread" or "Add milk":
-   - Use search_catalog tool to find the item
-   - If multiple options (brands/sizes), ask which one they prefer
-   - Ask for quantity if not specified
-   - Use add_to_cart tool with item_id and quantity
-   - Confirm: "I've added [quantity] [item name] to your cart."
+CONVERSATION FLOW:
+1. Describe the current scene or situation
+2. Present choices or challenges (not always explicit - let them be creative)
+3. ALWAYS end with a question prompting action:
+   - "What do you do?"
+   - "How do you respond?"
+   - "What's your next move?"
+4. When player responds, describe the outcome and consequences
+5. Continue the story based on their action
 
-2. RECIPE/MEAL REQUESTS:
-   When customer says "I need ingredients for pasta" or "Get me what I need for a sandwich":
-   - Use add_recipe_to_cart tool with the dish name
-   - This will automatically add all needed ingredients
-   - Confirm what was added: "I've added pasta, pasta sauce, and cheese for your pasta meal."
+IMPORTANT CONTINUITY:
+- Reference past events: "You remember the merchant mentioned this place..."
+- Track relationships: "The guard recognizes you from earlier..."
+- Build consequences: "Your earlier choice to spare the bandit has consequences..."
+- Remember items/abilities: "You still have the rusty key from the tavern..."
 
-3. CART MANAGEMENT:
-   - "What's in my cart?" → IMMEDIATELY use show_cart tool
-   - "Remove [item]" → IMMEDIATELY use remove_from_cart tool with the item name
-   - "Change [item] to [quantity]" → IMMEDIATELY use update_quantity tool with item name and new quantity
-   - "Make it [number]" → IMMEDIATELY use update_quantity tool
-   
-   CRITICAL: Don't just acknowledge these requests - USE THE TOOLS IMMEDIATELY
+DETECTIVE UNIVERSE SPECIAL RULES (if applicable):
+- Use record_clue tool when player discovers evidence
+- Use add_suspect tool when player encounters persons of interest
+- Use review_case_notes when player wants to review their investigation
+- Present red herrings and misleading evidence
+- Allow player to interrogate suspects and examine crime scenes
+- Build toward revealing the culprit based on accumulated evidence
+- Use noir language: "dame", "gumshoe", "case", "lead", "stiff" (for corpse)
 
-4. CHECKOUT:
-   When customer says "That's all", "Place my order", "I'm done", "Checkout":
-   - Use show_cart to review everything
-   - Ask for their name if you don't have it
-   - Use place_order tool to save the order
-   - Confirm: "Your order has been placed! Order number [ID]. Total: ₹[amount]. Thank you!"
+PACING (CRITICAL - KEEP STORIES SHORT):
+- Target: Complete story in 6-8 conversational turns (approximately 5-7 minutes)
+- Turn 1: Quick intro and immediate hook
+- Turns 2-4: Rapid escalation with 1-2 challenges
+- Turns 5-6: Quick climax
+- Turn 7: Fast resolution and ending
+- Keep each response to 2-3 sentences maximum
+- Move the story forward quickly - don't linger on descriptions
+- After turn 6, start wrapping up the story
+- Use phrases like "Time is running out" or "This is it" to signal climax
 
-IMPORTANT RULES:
-- Always confirm what you're adding to the cart
-- Ask clarifying questions when needed (brand, size, quantity)
-- Be proactive: "Anything else you'd like to add?"
-- Use tools immediately - don't just talk about using them
-- Keep conversation natural and friendly
-- No bullet points or formatting in speech""",
+DO NOT:
+- Make choices for the player
+- Tell them what their character thinks or feels
+- Railroad them into one solution
+- Forget previous events or conversations
+- Use meta-gaming language (don't say "roll for", "make a check", etc.)
+
+START: Begin by asking the player their character's name, then launch into the opening scene at {self.world['starting_location']}.""",
         )
     
     @function_tool
-    async def search_catalog(self, context: RunContext, item_name: str):
-        """Search for items in the catalog by name or tags.
+    async def record_event(
+        self, 
+        context: RunContext, 
+        event_type: str, 
+        description: str,
+        location: str = None
+    ):
+        """Record a significant story event for continuity tracking.
         
-        Use this when customer mentions an item they want to buy.
+        Use this tool to remember important story beats so you can reference them later.
         
         Args:
-            item_name: The item name or description (e.g., "bread", "milk", "chips")
+            event_type: Type of event - "combat", "discovery", "npc_interaction", "location_change", "item_acquired"
+            description: Brief description of what happened
+            location: Where it happened (optional)
             
         Returns:
-            List of matching items with details
+            Confirmation that event was recorded, plus pacing guidance
         """
-        item_name_lower = item_name.lower()
-        matches = []
+        self.turn_count += 1
         
-        # Search in all categories
-        for category in ['groceries', 'snacks', 'prepared_food']:
-            if category in self.catalog:
-                for item in self.catalog[category]:
-                    # Check if search term is in name or tags
-                    if (item_name_lower in item['name'].lower() or 
-                        any(item_name_lower in tag.lower() for tag in item.get('tags', []))):
-                        matches.append({
-                            'id': item['id'],
-                            'name': item['name'],
-                            'brand': item.get('brand', 'N/A'),
-                            'size': item.get('size', 'N/A'),
-                            'price': item['price'],
-                            'category': item['category']
-                        })
+        event = {
+            "turn": self.turn_count,
+            "type": event_type,
+            "description": description,
+            "location": location or self.current_location,
+            "timestamp": datetime.now().isoformat()
+        }
         
-        if matches:
-            logger.info(f"Found {len(matches)} matches for '{item_name}'")
-            if len(matches) == 1:
-                return f"Found: {matches[0]['name']} ({matches[0]['brand']}, {matches[0]['size']}) - ₹{matches[0]['price']}. Item ID: {matches[0]['id']}"
+        self.story_events.append(event)
+        
+        # Update current location if it changed
+        if event_type == "location_change" and location:
+            self.current_location = location
+        
+        logger.info(f"📖 Story event recorded (Turn {self.turn_count}): {event_type} - {description}")
+        
+        # Provide pacing guidance
+        pacing_msg = f"Event recorded: {description}. "
+        
+        if self.turn_count >= 7:
+            pacing_msg += "WRAP UP NOW - End the story in the next response with a satisfying conclusion."
+        elif self.turn_count >= 5:
+            pacing_msg += "CLIMAX - Build to the final confrontation or revelation NOW."
+        elif self.turn_count >= 3:
+            pacing_msg += "ESCALATE - Present the main challenge soon."
+        
+        return pacing_msg
+    
+    @function_tool
+    async def update_inventory(
+        self, 
+        context: RunContext, 
+        item: str,
+        action: str = "add"
+    ):
+        """Track items the player acquires or loses.
+        
+        Use this when player finds, buys, or loses items.
+        
+        Args:
+            item: Name of the item
+            action: "add" to give item to player, "remove" to take it away
+            
+        Returns:
+            Confirmation message
+        """
+        if action == "add":
+            self.inventory.append(item)
+            logger.info(f"🎒 Added to inventory: {item}")
+            return f"Added {item} to inventory"
+        elif action == "remove":
+            if item in self.inventory:
+                self.inventory.remove(item)
+                logger.info(f"🎒 Removed from inventory: {item}")
+                return f"Removed {item} from inventory"
             else:
-                result = f"Found {len(matches)} options:\n"
-                for idx, m in enumerate(matches, 1):
-                    result += f"{idx}. {m['name']} ({m['brand']}, {m['size']}) - ₹{m['price']} [ID: {m['id']}]\n"
-                return result
-        else:
-            logger.warning(f"No matches found for '{item_name}'")
-            return f"Sorry, I couldn't find '{item_name}' in our catalog. Could you try describing it differently?"
+                return f"Player doesn't have {item}"
+        
+        return "Invalid action"
     
     @function_tool
-    async def add_to_cart(self, context: RunContext, item_id: str, quantity: int = 1):
-        """Add a specific item to the cart.
+    async def add_companion(self, context: RunContext, npc_name: str, description: str):
+        """Track NPCs who join the player as companions.
         
-        Use this after searching and finding the item the customer wants.
+        Use this when an NPC agrees to travel with the player.
         
         Args:
-            item_id: The item ID (e.g., "G001", "S002")
-            quantity: How many of this item (default: 1)
+            npc_name: Name of the companion
+            description: Brief description (role, personality, etc.)
             
         Returns:
             Confirmation message
         """
-        # Find item in catalog
-        item = self._find_item_by_id(item_id)
-        
-        if not item:
-            return f"Error: Item {item_id} not found in catalog"
-        
-        # Check if item already in cart
-        for cart_item in self.cart:
-            if cart_item['item_id'] == item_id:
-                cart_item['quantity'] += quantity
-                cart_item['total'] = cart_item['quantity'] * cart_item['price']
-                logger.info(f"Updated {item['name']} quantity to {cart_item['quantity']}")
-                return f"Updated cart: {cart_item['quantity']} x {item['name']} (₹{cart_item['total']})"
-        
-        # Add new item to cart
-        cart_item = {
-            'item_id': item_id,
-            'name': item['name'],
-            'brand': item.get('brand', 'N/A'),
-            'size': item.get('size', 'N/A'),
-            'quantity': quantity,
-            'price': item['price'],
-            'total': item['price'] * quantity
-        }
-        self.cart.append(cart_item)
-        
-        logger.info(f"Added to cart: {quantity} x {item['name']}")
-        return f"Added {quantity} x {item['name']} (₹{cart_item['total']}) to your cart"
-    
-    @function_tool
-    async def add_recipe_to_cart(self, context: RunContext, dish_name: str):
-        """Add all ingredients for a specific dish/recipe to the cart.
-        
-        Use this when customer asks for "ingredients for X" or "what I need for X".
-        Examples: "pasta", "sandwich", "breakfast"
-        
-        Args:
-            dish_name: The dish/meal name (e.g., "pasta", "peanut butter sandwich")
-            
-        Returns:
-            Confirmation of what was added
-        """
-        dish_name_lower = dish_name.lower()
-        
-        # Find matching recipe
-        if 'recipes' not in self.catalog:
-            return "Sorry, I don't have recipe information available"
-        
-        recipe_found = None
-        for recipe_key, item_ids in self.catalog['recipes'].items():
-            if dish_name_lower in recipe_key.lower() or recipe_key in dish_name_lower:
-                recipe_found = item_ids
-                break
-        
-        if not recipe_found:
-            return f"Sorry, I don't have a recipe for '{dish_name}'. Try asking for specific items instead."
-        
-        # Add all items from recipe
-        added_items = []
-        for item_id in recipe_found:
-            item = self._find_item_by_id(item_id)
-            if item:
-                # Add to cart
-                await self.add_to_cart(context, item_id, quantity=1)
-                added_items.append(item['name'])
-        
-        logger.info(f"Added recipe '{dish_name}': {added_items}")
-        return f"Added ingredients for {dish_name}: {', '.join(added_items)}"
-    
-    @function_tool
-    async def show_cart(self, context: RunContext):
-        """Show all items currently in the cart.
-        
-        Use this when customer asks "What's in my cart?" or before checkout.
-        
-        Returns:
-            Cart summary with items and total
-        """
-        if not self.cart:
-            return "Your cart is empty. What would you like to order?"
-        
-        cart_summary = "Here's what's in your cart:\n"
-        total = 0
-        
-        for item in self.cart:
-            cart_summary += f"- {item['quantity']} x {item['name']} ({item['brand']}, {item['size']}) = ₹{item['total']}\n"
-            total += item['total']
-        
-        cart_summary += f"\nTotal: ₹{total:.2f}"
-        
-        logger.info(f"Cart summary: {len(self.cart)} items, ₹{total}")
-        return cart_summary
-    
-    @function_tool
-    async def remove_from_cart(self, context: RunContext, item_name: str):
-        """Remove an item from the cart.
-        
-        Use this when customer says "Remove [item]" or "Take out [item]".
-        
-        Args:
-            item_name: Name of the item to remove (can be partial name)
-            
-        Returns:
-            Confirmation message
-        """
-        if not self.cart:
-            return "Your cart is empty."
-        
-        item_name_lower = item_name.lower().strip()
-        
-        for i, cart_item in enumerate(self.cart):
-            item_full_name = cart_item['name'].lower()
-            # Check if search term is in the item name or vice versa
-            if item_name_lower in item_full_name or item_full_name in item_name_lower:
-                removed = self.cart.pop(i)
-                logger.info(f"Removed from cart: {removed['name']}")
-                return f"Removed {removed['name']} from your cart"
-        
-        # If no match, show what's in cart
-        cart_items = [item['name'] for item in self.cart]
-        return f"I couldn't find '{item_name}' in your cart. You have: {', '.join(cart_items)}"
-    
-    @function_tool
-    async def update_quantity(self, context: RunContext, item_name: str, new_quantity: int):
-        """Update the quantity of an item in the cart.
-        
-        Use this when customer says "Change [item] to [number]" or "Make it [number]".
-        
-        Args:
-            item_name: Name of the item to update (can be partial name)
-            new_quantity: New quantity (if 0, remove item)
-            
-        Returns:
-            Confirmation message
-        """
-        logger.info(f"🔍 UPDATE REQUEST: item_name='{item_name}', new_quantity={new_quantity}")
-        logger.info(f"🛒 Current cart: {[item['name'] for item in self.cart]}")
-        
-        if new_quantity == 0:
-            return await self.remove_from_cart(context, item_name)
-        
-        if not self.cart:
-            return "Your cart is empty."
-        
-        item_name_lower = item_name.lower().strip()
-        
-        # Try to find matching item
-        matched_item = None
-        for cart_item in self.cart:
-            item_full_name = cart_item['name'].lower()
-            # Check if search term is in the item name or vice versa
-            if item_name_lower in item_full_name or item_full_name in item_name_lower:
-                matched_item = cart_item
-                break
-        
-        if matched_item:
-            old_qty = matched_item['quantity']
-            matched_item['quantity'] = new_quantity
-            matched_item['total'] = matched_item['price'] * new_quantity
-            logger.info(f"✅ Updated {matched_item['name']}: {old_qty} → {new_quantity}")
-            return f"Updated {matched_item['name']} quantity from {old_qty} to {new_quantity}. New total: ₹{matched_item['total']}"
-        
-        # If no match, show what's in cart
-        cart_items = [item['name'] for item in self.cart]
-        logger.warning(f"❌ No match found for '{item_name}'")
-        return f"I couldn't find '{item_name}' in your cart. You have: {', '.join(cart_items)}"
-    
-    @function_tool
-    async def place_order(self, context: RunContext, customer_name: str):
-        """Place the final order and save it to a JSON file.
-        
-        Use this when customer is done and says "Place order", "That's all", "Checkout".
-        
-        Args:
-            customer_name: Customer's name for the order
-            
-        Returns:
-            Order confirmation with order number
-        """
-        if not self.cart:
-            return "Your cart is empty. Add some items before placing an order."
-        
-        self.customer_name = customer_name
-        
-        # Calculate total
-        total = sum(item['total'] for item in self.cart)
-        
-        # Create order object
-        order_id = f"ORD_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-        order = {
-            'order_id': order_id,
-            'customer_name': customer_name,
-            'timestamp': datetime.now().isoformat(),
-            'items': self.cart,
-            'total': total,
-            'currency': 'INR',
-            'status': 'placed'
+        companion = {
+            "name": npc_name,
+            "description": description,
+            "joined_at_turn": self.turn_count
         }
         
-        # Save to JSON file
-        orders_dir = Path("orders")
-        orders_dir.mkdir(exist_ok=True)
+        self.companions.append(companion)
+        logger.info(f"👥 Companion joined: {npc_name}")
         
-        order_file = orders_dir / f"{order_id}.json"
-        
-        with open(order_file, "w") as f:
-            json.dump(order, f, indent=2)
-        
-        logger.info(f"✓ Order placed: {order_id} for {customer_name}, Total: ₹{total}")
-        
-        return f"Order confirmed! Your order number is {order_id}. Total: ₹{total:.2f}. Thank you for shopping with FreshMart!"
+        return f"{npc_name} has joined as a companion"
     
-    def _find_item_by_id(self, item_id: str):
-        """Helper method to find item in catalog by ID"""
-        for category in ['groceries', 'snacks', 'prepared_food']:
-            if category in self.catalog:
-                for item in self.catalog[category]:
-                    if item['id'] == item_id:
-                        return item
-        return None
-
-
-def load_catalog():
-    """Load catalog from JSON file"""
-    catalog_file = Path("DB/catalog.json")
+    @function_tool
+    async def record_clue(self, context: RunContext, clue: str, location: str):
+        """Record a clue discovered during investigation (Detective universe).
+        
+        Use this when the player finds evidence, witnesses something, or discovers information.
+        
+        Args:
+            clue: Description of the clue found
+            location: Where the clue was found
+            
+        Returns:
+            Confirmation message
+        """
+        clue_entry = {
+            "clue": clue,
+            "location": location,
+            "turn": self.turn_count,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        self.clues.append(clue_entry)
+        logger.info(f"🔍 Clue recorded: {clue}")
+        
+        return f"Clue recorded: {clue}"
     
-    if not catalog_file.exists():
-        logger.error("catalog.json not found!")
-        return None
+    @function_tool
+    async def add_suspect(
+        self, 
+        context: RunContext, 
+        name: str, 
+        description: str,
+        motive: str = "Unknown",
+        alibi: str = "Unknown"
+    ):
+        """Track suspects in the case (Detective universe).
+        
+        Use this when the player encounters a person of interest in the investigation.
+        
+        Args:
+            name: Suspect's name
+            description: Physical description and background
+            motive: Their potential motive for the crime
+            alibi: Their claimed whereabouts during the crime
+            
+        Returns:
+            Confirmation message
+        """
+        suspect = {
+            "name": name,
+            "description": description,
+            "motive": motive,
+            "alibi": alibi,
+            "added_at_turn": self.turn_count
+        }
+        
+        self.suspects.append(suspect)
+        logger.info(f"🕵️ Suspect added: {name}")
+        
+        return f"Added {name} to suspect list"
     
-    with open(catalog_file, "r") as f:
-        return json.load(f)
+    @function_tool
+    async def review_case_notes(self, context: RunContext):
+        """Review all clues and suspects collected so far (Detective universe).
+        
+        Use this when player asks to review their notes, clues, or suspect list.
+        
+        Returns:
+            Summary of all evidence and suspects
+        """
+        if not self.clues and not self.suspects:
+            return "You haven't collected any clues or identified any suspects yet."
+        
+        notes = "CASE NOTES:\n\n"
+        
+        if self.clues:
+            notes += "CLUES DISCOVERED:\n"
+            for i, clue_entry in enumerate(self.clues, 1):
+                notes += f"{i}. {clue_entry['clue']} (Found at: {clue_entry['location']})\n"
+            notes += "\n"
+        
+        if self.suspects:
+            notes += "SUSPECTS:\n"
+            for i, suspect in enumerate(self.suspects, 1):
+                notes += f"{i}. {suspect['name']}\n"
+                notes += f"   Motive: {suspect['motive']}\n"
+                notes += f"   Alibi: {suspect['alibi']}\n"
+            notes += "\n"
+        
+        logger.info(f"📋 Case notes reviewed: {len(self.clues)} clues, {len(self.suspects)} suspects")
+        
+        return notes
+    
+    @function_tool
+    async def save_session(self, context: RunContext, session_title: str):
+        """Save the current game session to a JSON file.
+        
+        Use this when the player wants to end the session or at major story milestones.
+        
+        Args:
+            session_title: A title for this session (e.g., "The Dragon's Lair")
+            
+        Returns:
+            Confirmation with session details
+        """
+        session_id = f"SESSION_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        
+        session_data = {
+            "session_id": session_id,
+            "title": session_title,
+            "universe": self.universe,
+            "tone": self.tone,
+            "player_name": self.player_name,
+            "total_turns": self.turn_count,
+            "current_location": self.current_location,
+            "inventory": self.inventory,
+            "companions": [c['name'] for c in self.companions],
+            "clues": self.clues if self.universe == "detective" else [],
+            "suspects": [s['name'] for s in self.suspects] if self.universe == "detective" else [],
+            "story_events": self.story_events,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Save to file
+        sessions_dir = Path("game_sessions")
+        sessions_dir.mkdir(exist_ok=True)
+        
+        session_file = sessions_dir / f"{session_id}.json"
+        
+        with open(session_file, "w") as f:
+            json.dump(session_data, f, indent=2)
+        
+        logger.info(f"💾 Session saved: {session_id} - {session_title}")
+        
+        summary = f"Session '{session_title}' saved! You played for {self.turn_count} turns"
+        if self.inventory:
+            summary += f" and collected {len(self.inventory)} items"
+        if self.companions:
+            summary += f" with {len(self.companions)} companion(s)"
+        
+        return summary
 
 
 def prewarm(proc: JobProcess):
@@ -376,27 +393,25 @@ def prewarm(proc: JobProcess):
 
 
 async def entrypoint(ctx: JobContext):
-    """Main entry point for the food ordering agent"""
+    """Main entry point for the Game Master agent"""
     
     ctx.log_context_fields = {"room": ctx.room.name}
     
-    # Load catalog
-    catalog = load_catalog()
-    if not catalog:
-        logger.error("Failed to load catalog. Exiting.")
-        return
+    # You can change these to customize the game!
+    # Options: "fantasy", "sci-fi", "post-apocalypse", "horror", "detective"
+    universe = "detective"
+    # Options: "dramatic", "humorous", "spooky", "epic", "noir"
+    tone = "dramatic"
     
-    logger.info(f"Catalog loaded: {len(catalog.get('groceries', []))} groceries, "
-                f"{len(catalog.get('snacks', []))} snacks, "
-                f"{len(catalog.get('prepared_food', []))} prepared foods")
+    logger.info(f"🎲 Starting {tone} {universe} adventure")
     
     # Create voice pipeline
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
         llm=google.LLM(model="gemini-2.5-flash"),
         tts=murf.TTS(
-            voice="en-US-matthew",  # Indian female voice
-            style="Conversation",
+            voice="en-US-matthew",  # Deep, narrative voice
+            style="Narration",      # Story-telling style
             tokenizer=tokenize.basic.SentenceTokenizer(min_sentence_len=2),
             text_pacing=True
         ),
@@ -406,13 +421,13 @@ async def entrypoint(ctx: JobContext):
     )
     
     await session.start(
-        agent=FoodOrderingAgent(catalog),
+        agent=GameMasterAgent(universe=universe, tone=tone),
         room=ctx.room,
     )
     
     await ctx.connect()
     
-    logger.info("🛒 Food Ordering Agent ready!")
+    logger.info("🎲 Game Master ready to begin the adventure!")
 
 
 if __name__ == "__main__":
